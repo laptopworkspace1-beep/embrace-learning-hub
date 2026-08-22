@@ -832,6 +832,8 @@ export const compileCode = createServerFn({ method: "POST" }).middleware([apiMet
         memoryLimitMb: num(problem["memoryLimitMb"], 128),
         studentId: claims.studentId,
         roundId: str(problem["roundId"]),
+        // Interactive Compile / Run: eligible for the fast multi-VM race.
+        purpose: "RUN",
       });
       console.info(
         `[run-timing] compileCode student=${claims.studentId} problem=${data.problemId} ` +
@@ -984,6 +986,8 @@ export const runCodeWithInput = createServerFn({ method: "POST" }).middleware([a
         memoryLimitMb: num(problem["memoryLimitMb"], 128),
         studentId: claims.studentId,
         roundId: str(problem["roundId"]),
+        // Interactive Compile / Run: eligible for the fast multi-VM race.
+        purpose: "RUN",
       });
       await attemptCounted;
       console.info(
