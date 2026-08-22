@@ -1,0 +1,12 @@
+import { SQL } from "bun";
+const db = new SQL(process.env["OWN_SUPABASE_DB_URL"]!);
+console.log((await db`select tablename, indexname, indexdef from pg_indexes where schemaname='public' and tablename in ('users','students','bug_awards','bug_definitions','student_answers','round_progress','round_scores','final_scores','sessions','test_cases','programming_submissions','debugging_submissions','batches')`).map((r:any)=>r.indexdef).join("\n"));
+console.log("\nbatches", await db`select code,name from batches order by code limit 10`);
+console.log("test_cases cols", (await db`select column_name from information_schema.columns where table_name='test_cases' order by ordinal_position`).map((r:any)=>r.column_name));
+console.log("student_answers cols", (await db`select column_name from information_schema.columns where table_name='student_answers' order by ordinal_position`).map((r:any)=>r.column_name));
+console.log("sample tc", await db`select * from test_cases limit 2`);
+console.log("q sample", await db`select prompt,"codeSnippet","expectedOutput",type,"correctOptionKey" from questions limit 5`);
+console.log("bugdefs", await db`select * from bug_definitions`);
+console.log("progprob", await db`select id,title,"starterCode","timeLimitSec",marks from programming_problems`);
+console.log("fk", await db`select conname, pg_get_constraintdef(oid) from pg_constraint where connamespace='public'::regnamespace and contype='f' and conrelid::regclass::text in ('students','bug_awards','student_answers','test_cases')`);
+await db.end();

@@ -30,3 +30,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local environment (never commit real values; .env.example is the template)
+.env
+.env.*
+!.env.example
+
+# Operator artefacts
+backups/
+coverage/
+*.dump
+*.sql.gz
+
+# Bootstrap configuration store (contains secrets)
+.data/
+
+# Vercel build output
+.vercel/
