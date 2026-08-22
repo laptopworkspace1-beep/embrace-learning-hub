@@ -1122,39 +1122,105 @@ function usableNodes(nodes: PistonNode[]): PistonNode[] {
   return nodes.filter((node) => node.enabled && node.url.trim() && node.healthStatus !== "OFFLINE");
 }
 
-/** Round-robin cursor used only to break ties between equally loaded nodes. */
-let rrCursor = 0;
+/* ------------------------------------------------------------------ */
+/* Global round-robin scheduler                                        */
+/* ------------------------------------------------------------------ */
 
 /**
- * Selection order: least-loaded healthy node first, with a round-robin tie
- * breaker so equally loaded VMs receive work in turn instead of always
- * starting at the same one. The student's sticky node is preferred only while
- * it is among the least loaded — capacity and health always win, so a stable
- * assignment can never pile work on one VM while the others sit idle.
+ * One scheduling cursor for the whole pool — not one per student, per request
+ * or per React client. The authoritative counter lives in the database so that
+ * several backend instances cannot each independently start at VM1; each
+ * instance atomically reserves a small block of tickets and consumes them
+ * locally, which keeps the hot path free of a round trip per execution.
  */
-function orderFor(nodes: PistonNode[], assigned: string | null): PistonNode[] {
-  const ratio = (node: PistonNode) => node.currentLoad / Math.max(1, node.maxConcurrentJobs);
-  const rotation = rrCursor++;
-  const list = nodes.map((node) => node.nodeId).sort();
-  const ranked = [...nodes].sort((a, b) => {
-    const online = (a.healthStatus === "ONLINE" ? 0 : 1) - (b.healthStatus === "ONLINE" ? 0 : 1);
-    if (online) return online;
-    const load = ratio(a) - ratio(b);
-    // Loads within one job of each other count as a tie and rotate.
-    if (Math.abs(load) > 1 / Math.max(a.maxConcurrentJobs, b.maxConcurrentJobs)) return load;
-    const ia = (list.indexOf(a.nodeId) - rotation + list.length * 2) % list.length;
-    const ib = (list.indexOf(b.nodeId) - rotation + list.length * 2) % list.length;
-    return ia - ib;
-  });
-  const own = ranked.find((node) => node.nodeId === assigned);
-  const best = ranked[0];
-  // Keep the sticky node first only when it is effectively as free as the best
-  // candidate; otherwise it simply keeps its ranked position.
-  if (own && best && own.healthStatus === "ONLINE" && ratio(own) - ratio(best) <= 1 / own.maxConcurrentJobs) {
-    return [own, ...ranked.filter((node) => node.nodeId !== own.nodeId)];
+const TICKET_BLOCK = 16;
+let ticketNext = 0;
+let ticketEnd = 0;
+let ticketRefill: Promise<void> | null = null;
+/** Fallback cursor used only when the shared counter is unreachable. */
+let localTicket = Math.floor(Math.random() * 4);
+
+let schedulerReady = false;
+
+async function reserveTicketBlock(): Promise<void> {
+  const client = await schema();
+  if (!schedulerReady) {
+    await client.unsafe(
+    `create table if not exists codearena_private.piston_scheduler (
+       id int primary key,
+       cursor bigint not null default 0,
+       updated_at timestamptz not null default now()
+     )`,
+    );
+    schedulerReady = true;
   }
-  return ranked;
+  const rows = await client.unsafe(
+    `insert into codearena_private.piston_scheduler (id, cursor)
+     values (1, $1)
+     on conflict (id) do update
+       set cursor = codearena_private.piston_scheduler.cursor + $1, updated_at = now()
+     returning cursor`,
+    [TICKET_BLOCK],
+  );
+  const end = Number(rows[0]?.["cursor"] ?? 0);
+  ticketNext = end - TICKET_BLOCK;
+  ticketEnd = end;
 }
+
+/** Next global round-robin ticket. Never throws and never blocks for long. */
+async function nextTicket(): Promise<number> {
+  if (ticketNext < ticketEnd) return ticketNext++;
+  try {
+    ticketRefill ??= reserveTicketBlock().finally(() => {
+      ticketRefill = null;
+    });
+    await ticketRefill;
+    if (ticketNext < ticketEnd) return ticketNext++;
+  } catch (err) {
+    console.error("[piston-pool] shared round-robin counter unavailable", err);
+  }
+  return localTicket++;
+}
+
+/**
+ * Scheduling order: GLOBAL ROUND ROBIN, filtered by health and capacity.
+ *
+ * Nodes are ranked by their position in the rotation starting at the current
+ * ticket, so four equally healthy VMs receive requests strictly in turn
+ * (VM1 → VM2 → VM3 → VM4 → VM1 …) instead of the previous least-loaded rule,
+ * which kept picking whichever VM happened to be marginally freer.
+ *
+ * Capacity and health still win over fairness:
+ *   - a node at maxConcurrentJobs is pushed to the back (skipped in practice);
+ *   - a node whose utilisation is far above the least-loaded node is demoted
+ *     so rotation can never intentionally overload a busy VM;
+ *   - non-ONLINE nodes always come last.
+ *
+ * The student's sticky assignment is deliberately NOT preferred here: affinity
+ * must never override load balancing. It is still recorded on the execution
+ * row as `assignedNodeId` for the admin history.
+ */
+const OVERLOAD_MARGIN = 0.25;
+
+function orderFor(nodes: PistonNode[], _assigned: string | null, ticket: number): PistonNode[] {
+  void _assigned;
+  const ratio = (node: PistonNode) => node.currentLoad / Math.max(1, node.maxConcurrentJobs);
+  const ids = nodes.map((node) => node.nodeId).sort();
+  const minRatio = Math.min(...nodes.map(ratio));
+  const rank = (node: PistonNode) => {
+    if (node.healthStatus !== "ONLINE") return 3;
+    if (node.currentLoad >= node.maxConcurrentJobs) return 2;
+    // Significantly busier than the freest VM: still usable, but only after the
+    // fairly-rotated, comparably loaded ones.
+    if (ratio(node) - minRatio > OVERLOAD_MARGIN) return 1;
+    return 0;
+  };
+  const rotation = ((ticket % ids.length) + ids.length) % ids.length;
+  const slot = (node: PistonNode) =>
+    (ids.indexOf(node.nodeId) - rotation + ids.length * 2) % ids.length;
+  return [...nodes].sort((a, b) => rank(a) - rank(b) || slot(a) - slot(b) || ratio(a) - ratio(b));
+}
+
 
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1199,15 +1265,20 @@ async function requestSignal(): Promise<AbortSignal | null> {
   }
 }
 
-/** Only interactive Compile / Run may be raced. */
+/**
+ * Only the explicit student "Run All VMs" fast mode is raced. Ordinary
+ * Compile / Run keeps using the global round-robin load balancer, and no
+ * scoring path ever enters the race.
+ */
 function raceEligible(input: ExecInput): boolean {
-  return String(input.purpose ?? "") === "RUN";
+  return String(input.purpose ?? "") === "RUN_ALL";
 }
 
 /**
  * Returns the winning result, or `null` when the race is not applicable
- * (disabled, not interactive, too few healthy VMs, or the concurrency valve is
- * closed) so the caller continues with the normal controlled router.
+ * (disabled, not "Run All VMs", no healthy VM with capacity, or the
+ * concurrency valve is closed) so the caller continues with the normal
+ * round-robin router.
  */
 async function raceOnPistonPool(
   input: ExecInput,
@@ -1216,15 +1287,16 @@ async function raceOnPistonPool(
 ): Promise<PoolResult | null> {
   if (!raceEnabled() || !raceEligible(input)) return null;
 
-  // Load protection: only ONLINE VMs with spare capacity may be raced.
+  // Load protection: only ONLINE VMs with spare capacity may be raced, so the
+  // race can use fewer than four VMs when some are full or unhealthy.
   const eligible = nodes
     .filter((node) => node.healthStatus === "ONLINE" && node.currentLoad < node.maxConcurrentJobs)
     .slice(0, RACE_MAX_NODES);
-  if (eligible.length < 2) return null;
+  if (!eligible.length) return null;
   if (raceInFlight >= raceMaxConcurrent()) {
     console.warn(
       `[piston-race] concurrency limit reached (${raceInFlight}/${raceMaxConcurrent()}) — ` +
-        "falling back to the least-loaded node strategy",
+        "falling back to the round-robin load balancer",
     );
     return null;
   }
@@ -1233,17 +1305,18 @@ async function raceOnPistonPool(
   raceInFlight += 1;
   const t0 = Date.now();
 
-  // Capacity slots are claimed up front; every one of them is released again
-  // on every exit path below (win, loss, failure, cancel, timeout, throw).
+  // Capacity slots are claimed atomically up front; every one of them is
+  // released again on every exit path below (win, loss, failure, cancel,
+  // timeout, throw) so a cancelled job never stays counted as active.
   const claimed: PistonNode[] = [];
   for (const node of eligible) {
     if (await acquireSlot(node.nodeId)) claimed.push(node);
   }
-  if (claimed.length < 2) {
-    await Promise.all(claimed.map((node) => releaseSlot(node.nodeId)));
+  if (!claimed.length) {
     raceInFlight -= 1;
     return null;
   }
+
 
   const controllers = new Map<string, AbortController>();
   const cancelled: string[] = [];
@@ -1457,14 +1530,18 @@ export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | nu
 
   const studentId = String(input.studentId ?? "");
   const roundId = String(input.roundId ?? "");
+  // Recorded for the admin execution history only — it never biases scheduling.
   const assigned = await assignedNodeFor(studentId, roundId, nodes).catch(() => nodes[0]!.nodeId);
-  // Interactive Compile / Run: race the healthy VMs, first valid response
-  // wins and the rest are cancelled. Returns null when the race does not
-  // apply, in which case the controlled router below serves the request.
+  // "Run All VMs": race the healthy VMs, first valid response wins and the
+  // rest are cancelled. Returns null when the race does not apply, in which
+  // case the round-robin router below serves the request.
   const raced = await raceOnPistonPool({ ...input }, nodes, assigned);
   if (raced) return raced;
 
-  const ordered = orderFor(nodes, assigned);
+  // One global ticket per execution drives the rotation across ALL four VMs.
+  const ticket = await nextTicket();
+  const ordered = orderFor(nodes, assigned, ticket);
+
   const tAssign = Date.now();
 
   let attempts = 0;
@@ -1497,14 +1574,17 @@ export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | nu
 
     }
 
-    // Bounded queue: wait for capacity on the assigned node before moving on,
-    // never send work to a node at maxConcurrentJobs. A node that stays full
-    // with no activity for minutes leaked its slots (interrupted requests),
-    // so try one reclaim before queueing against a phantom load.
+    // Bounded queue: never send work to a node at maxConcurrentJobs. Every
+    // other VM is tried first (rotation order); only when the LAST candidate
+    // is also full does the run wait briefly for capacity. A node that stays
+    // full with no activity for minutes leaked its slots (interrupted
+    // requests), so try one reclaim before queueing against a phantom load.
     const tSlot = Date.now();
     let slot = await acquireSlot(node.nodeId);
     if (!slot && (await reclaimLeakedSlots(node.nodeId))) slot = await acquireSlot(node.nodeId);
-    if (!slot && node.nodeId === assigned && Date.now() < deadline) {
+    const isLastCandidate = node.nodeId === ordered[ordered.length - 1]!.nodeId;
+    if (!slot && isLastCandidate && Date.now() < deadline) {
+
       // Only a run that actually has to wait is registered as QUEUED, so the
       // normal (immediately served) path costs no extra database write.
       inflightId ??= await beginInflight({

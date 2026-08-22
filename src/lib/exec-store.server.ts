@@ -328,7 +328,7 @@ export type ExecutionRecordInput = {
   engineId?: string | null;
   engineName?: string;
   provider: Provider;
-  purpose?: "RUN" | "SUBMIT" | "HEALTH" | "TEST";
+  purpose?: "RUN" | "RUN_ALL" | "SUBMIT" | "HEALTH" | "TEST";
   attempt: number;
   language: string;
   status: NormalizedStatus;

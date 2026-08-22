@@ -13,7 +13,10 @@ const codeInput = z.object({
   problemId: z.string().min(1),
   language: z.string().trim().min(1).max(20),
   code: z.string().min(1, "Write some code first").max(100_000),
+  /** Explicit "Run All VMs" fast mode: race every healthy VM, first valid wins. */
+  runAll: z.boolean().optional(),
 });
+
 
 /** Round payload for the student. Answer keys and hidden tests never leave the server. */
 export const getRoundPlay = createServerFn({ method: "POST" }).middleware([apiMetrics("student.getRoundPlay")])
@@ -504,7 +507,10 @@ const debugRunInput = z.object({
   language: z.string().trim().min(1).max(20).optional(),
   stdin: z.string().max(20_000).optional(),
   mode: z.enum(["COMPILE", "RUN"]).optional(),
+  /** Explicit "Run All VMs" fast mode: race every healthy VM, first valid wins. */
+  runAll: z.boolean().optional(),
 });
+
 
 /**
  * Round 2 Compile / Run. The program is compiled and executed by the
@@ -551,7 +557,9 @@ export const runDebugCode = createServerFn({ method: "POST" }).middleware([apiMe
       ...(data.stdin !== undefined ? { stdin: data.stdin } : {}),
       compileOnly,
       studentId: claims.studentId,
+      purpose: data.runAll ? "RUN_ALL" : "RUN",
     });
+
     await attemptCounted;
     console.info(
       `[run-timing] runDebugCode student=${claims.studentId} problem=${data.problemId} ` +
@@ -837,8 +845,9 @@ export const compileCode = createServerFn({ method: "POST" }).middleware([apiMet
         memoryLimitMb: num(problem["memoryLimitMb"], 128),
         studentId: claims.studentId,
         roundId: str(problem["roundId"]),
-        // Interactive Compile / Run: eligible for the fast multi-VM race.
-        purpose: "RUN",
+        // "Run All VMs" opts into the multi-VM race; normal Run/Compile uses
+        // the global round-robin load balancer.
+        purpose: data.runAll ? "RUN_ALL" : "RUN",
       });
       console.info(
         `[run-timing] compileCode student=${claims.studentId} problem=${data.problemId} ` +
@@ -991,8 +1000,9 @@ export const runCodeWithInput = createServerFn({ method: "POST" }).middleware([a
         memoryLimitMb: num(problem["memoryLimitMb"], 128),
         studentId: claims.studentId,
         roundId: str(problem["roundId"]),
-        // Interactive Compile / Run: eligible for the fast multi-VM race.
-        purpose: "RUN",
+        // "Run All VMs" opts into the multi-VM race; normal Run/Compile uses
+        // the global round-robin load balancer.
+        purpose: data.runAll ? "RUN_ALL" : "RUN",
       });
       await attemptCounted;
       console.info(
