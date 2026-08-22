@@ -1458,6 +1458,12 @@ export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | nu
   const studentId = String(input.studentId ?? "");
   const roundId = String(input.roundId ?? "");
   const assigned = await assignedNodeFor(studentId, roundId, nodes).catch(() => nodes[0]!.nodeId);
+  // Interactive Compile / Run: race the healthy VMs, first valid response
+  // wins and the rest are cancelled. Returns null when the race does not
+  // apply, in which case the controlled router below serves the request.
+  const raced = await raceOnPistonPool({ ...input }, nodes, assigned);
+  if (raced) return raced;
+
   const ordered = orderFor(nodes, assigned);
   const tAssign = Date.now();
 
