@@ -186,21 +186,35 @@ export async function evaluateDebugSubmission(input: {
    * expected output. Compiling alone never earns the base marks.
    */
   const publicExpected = normalizeOutput(str(input.problem["publicExpectedOutput"]));
+  const compileStart = Date.now();
   const execution = await checkDebugCode(input.problem, input.sourceCode, {
     language,
     stdin: str(input.problem["publicInput"]),
     studentId: input.studentId,
   });
+  const compileMs = Date.now() - compileStart;
 
+  /*
+   * The base run above is also the compilation gate. When the program does not
+   * compile — or the execution service itself is unavailable — no hidden test
+   * case is executed at all: the compiler error is reported immediately with a
+   * score of 0.
+   */
   let judged: JudgeResult | null = null;
-  if (tests.length) {
+  const testStart = Date.now();
+  if (tests.length && execution.serviceAvailable && execution.compiled) {
     const { judgeSubmission } = await import("./judge.server");
     judged = await judgeSubmission(language, input.sourceCode, tests, input.problem, {
       studentId: input.studentId,
       roundId: str(input.problem["roundId"]),
       submissionId,
+      // Compilation already succeeded for this exact source, so every test
+      // starts immediately in parallel across the VM pool.
+      assumeCompiled: true,
     });
   }
+  const testMs = Date.now() - testStart;
+
 
   /*
    * Two-level Round 2 scoring, computed here on the server only:
