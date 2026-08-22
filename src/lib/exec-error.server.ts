@@ -218,7 +218,7 @@ export type ExecInput = {
   studentId?: string | null;
   /** Round/session the execution belongs to, for sticky assignment. */
   roundId?: string | null;
-  purpose?: "RUN" | "SUBMIT" | "HEALTH" | "TEST";
+  purpose?: "RUN" | "RUN_ALL" | "SUBMIT" | "HEALTH" | "TEST";
 };
 
 /** The normalized result every provider must produce. */

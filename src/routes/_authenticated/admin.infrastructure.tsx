@@ -213,9 +213,11 @@ function AdminInfrastructure() {
 
           <h2 className="text-lg font-semibold">Piston nodes</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Each student is assigned a node server-side for the round and keeps it across submissions. If that node
-            is full, unhealthy or offline, the router fails over to another healthy node, and finally to the
-            configured Judge0 fallback. Adding a node here is all that is needed — no code change.
+            Executions are distributed across every healthy node with a global round-robin
+            scheduler: each request goes to the next node in the rotation that is online and below
+            its job limit. A full, unhealthy or offline node is skipped and automatically rejoins
+            the rotation when it recovers. Adding a node here is all that is needed — no code
+            change.
           </p>
           <dl className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[
@@ -231,6 +233,40 @@ function AdminInfrastructure() {
             ))}
           </dl>
         </section>
+
+        {/* Live load-balancing summary — real counters straight from the pool. */}
+        <section className="rounded-lg border border-border bg-card p-5">
+          <h2 className="text-lg font-semibold">Load balancing</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Current active jobs and the share of total executions each node has served. With all
+            nodes healthy the shares should stay close to even.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {nodes.map((node) => {
+              const totalRuns = nodes.reduce((sum, n) => sum + n.totalExecutions, 0);
+              const share = totalRuns ? Math.round((node.totalExecutions / totalRuns) * 100) : 0;
+              const utilization = Math.round(
+                (node.currentLoad / Math.max(1, node.maxConcurrentJobs)) * 100,
+              );
+              return (
+                <li key={`lb-${node.id}`} className="space-y-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span className="font-medium">{node.nodeId}</span>
+                    <span className="text-muted-foreground">
+                      Load: {node.currentLoad}/{node.maxConcurrentJobs} ({utilization}%) ·{" "}
+                      {node.totalExecutions} executions ({share}%) · {node.totalFailures} failures ·{" "}
+                      {node.healthStatus}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded bg-muted">
+                    <div className="h-full bg-primary" style={{ width: `${share}%` }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">

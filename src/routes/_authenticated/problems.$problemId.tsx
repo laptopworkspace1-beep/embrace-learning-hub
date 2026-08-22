@@ -280,6 +280,21 @@ function DebugWorkspace({ problemId }: { problemId: string }) {
       toast.error(error instanceof Error ? error.message : "Could not run your code.");
     },
   });
+  // Fast mode: the backend races every healthy VM and returns the first valid
+  // result. Nothing is stored and no marks are awarded.
+  const runAll = useMutation({
+    mutationFn: () =>
+      runDebugCode({
+        data: { problemId, sourceCode: value, mode: "RUN", stdin, runAll: true },
+        signal: abort.signal(),
+      }),
+    onSuccess: (result) => showResult(stdin, result),
+    onError: (error) => {
+      if (isAbort(error)) return;
+      toast.error(error instanceof Error ? error.message : "Could not run your code.");
+    },
+  });
+
   const submit = useMutation({
     mutationFn: () =>
       submitDebugFix({ data: { problemId, sourceCode: value }, signal: abort.signal() }),
@@ -294,7 +309,9 @@ function DebugWorkspace({ problemId }: { problemId: string }) {
       toast.error(error instanceof Error ? error.message : "Could not submit your fix.");
     },
   });
-  const debugBusy = compile.isPending || run.isPending || submit.isPending;
+  const debugBusy =
+    compile.isPending || run.isPending || runAll.isPending || submit.isPending;
+
 
   const finishRound = useMutation({
     mutationFn: () => submitRound({ data: { roundId: roundId ?? "" } }),
@@ -487,6 +504,15 @@ function DebugWorkspace({ problemId }: { problemId: string }) {
             <Button variant="secondary" disabled={!canPlay || debugBusy} onClick={() => run.mutate()}>
               {run.isPending ? "Running…" : "Run"}
             </Button>
+            <Button
+              variant="secondary"
+              disabled={!canPlay || debugBusy}
+              onClick={() => runAll.mutate()}
+              title="Runs on every available execution server and returns the fastest result."
+            >
+              {runAll.isPending ? "Running…" : "Run All VMs"}
+            </Button>
+
             <Button disabled={!canPlay || debugBusy} onClick={() => submit.mutate()}>
               {submit.isPending ? "Evaluating…" : "Submit fix"}
             </Button>
@@ -622,35 +648,61 @@ function CodeWorkspace({ problemId }: { problemId: string }) {
     },
   });
 
+  const showCustomResult = (result: {
+    serviceAvailable: boolean;
+    outcome: string;
+    stdin: string;
+    output: string;
+    compileOutput: string;
+    error: string;
+    durationMs: number;
+    memoryKb: number;
+    message: string;
+  }) => {
+    const status = result.serviceAvailable
+      ? outcomeStatus(result.outcome)
+      : ({ label: "EXECUTION ENGINE ERROR", tone: "warn" } as const);
+    setPanel({
+      status: status.label,
+      tone: status.tone,
+      input: result.stdin,
+      output: result.output,
+      compileOutput: result.compileOutput,
+      error: result.error,
+      durationMs: result.durationMs,
+      memoryKb: result.memoryKb,
+      message: result.message,
+    });
+    if (!result.serviceAvailable) toast.error(result.message);
+    else toast.message(`${status.label} · ${result.durationMs} ms`);
+  };
+  const runError = (error: unknown) => {
+    if (isAbort(error)) return;
+    toast.error(error instanceof Error ? error.message : "Could not run your code.");
+  };
+
   const custom = useMutation({
     mutationFn: () =>
       runCodeWithInput({
         data: { problemId, language: lang, code: value, stdin: customInput },
         signal: abort.signal(),
       }),
-    onSuccess: (result) => {
-      const status = result.serviceAvailable
-        ? outcomeStatus(result.outcome)
-        : ({ label: "EXECUTION ENGINE ERROR", tone: "warn" } as const);
-      setPanel({
-        status: status.label,
-        tone: status.tone,
-        input: result.stdin,
-        output: result.output,
-        compileOutput: result.compileOutput,
-        error: result.error,
-        durationMs: result.durationMs,
-        memoryKb: result.memoryKb,
-        message: result.message,
-      });
-      if (!result.serviceAvailable) toast.error(result.message);
-      else toast.message(`${status.label} · ${result.durationMs} ms`);
-    },
-    onError: (error) => {
-      if (isAbort(error)) return;
-      toast.error(error instanceof Error ? error.message : "Could not run your code.");
-    },
+    onSuccess: showCustomResult,
+    onError: runError,
   });
+
+  // Fast mode: raced across every healthy execution server, first valid result
+  // wins. Interactive only — nothing is stored and nothing is scored.
+  const runAll = useMutation({
+    mutationFn: () =>
+      runCodeWithInput({
+        data: { problemId, language: lang, code: value, stdin: customInput, runAll: true },
+        signal: abort.signal(),
+      }),
+    onSuccess: showCustomResult,
+    onError: runError,
+  });
+
 
   const trial = useMutation({
     mutationFn: () =>
@@ -711,7 +763,13 @@ function CodeWorkspace({ problemId }: { problemId: string }) {
       toast.error(error instanceof Error ? error.message : "Could not submit your code.");
     },
   });
-  const codeBusy = compile.isPending || custom.isPending || trial.isPending || submit.isPending;
+  const codeBusy =
+    compile.isPending ||
+    custom.isPending ||
+    runAll.isPending ||
+    trial.isPending ||
+    submit.isPending;
+
 
 
 
@@ -841,7 +899,16 @@ function CodeWorkspace({ problemId }: { problemId: string }) {
             <Button
               variant="secondary"
               disabled={!data.canPlay || codeBusy}
+              onClick={() => runAll.mutate()}
+              title="Runs on every available execution server and returns the fastest result."
+            >
+              {runAll.isPending ? "Running…" : "Run All VMs"}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!data.canPlay || codeBusy}
               onClick={() => trial.mutate()}
+
             >
               {trial.isPending ? "Running…" : "Run test cases"}
             </Button>

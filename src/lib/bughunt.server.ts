@@ -87,6 +87,8 @@ export async function checkDebugCode(
     compileOnly?: boolean;
     studentId?: string | null;
     roundId?: string | null;
+    /** "RUN_ALL" opts this interactive run into the multi-VM race. */
+    purpose?: "RUN" | "RUN_ALL";
   } = {},
 ) {
   const language =
@@ -100,7 +102,9 @@ export async function checkDebugCode(
       memoryLimitMb: num(problem["memoryLimitMb"], 128),
       studentId: options.studentId ?? null,
       roundId: options.roundId ?? str(problem["roundId"]),
+      purpose: options.purpose ?? "RUN",
     });
+
     return {
       status: options.compileOnly && run.outcome === "ok" ? "Compilation successful" : statusLabel(run.outcome),
       compiled: run.outcome !== "compilation_error",

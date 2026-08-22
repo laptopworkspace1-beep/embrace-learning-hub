@@ -435,7 +435,7 @@ export async function executeCode(input: {
   studentId?: string | null;
   /** Round/session identifier used for sticky Piston node assignment. */
   roundId?: string | null;
-  purpose?: "RUN" | "SUBMIT" | "HEALTH" | "TEST";
+  purpose?: "RUN" | "RUN_ALL" | "SUBMIT" | "HEALTH" | "TEST";
 }): Promise<ExecResult> {
   if (input.baseUrl?.trim()) {
     const { pistonAdapter } = await import("./engine-adapters.server");
