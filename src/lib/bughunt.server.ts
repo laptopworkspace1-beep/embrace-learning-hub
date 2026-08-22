@@ -7,6 +7,7 @@
  * configured bug definitions stored in the event database.
  */
 import { newId, nowIso, ownDb } from "./own-db.server";
+import { dedupe, fingerprint } from "./exec-dedupe.server";
 import { num, str, type Row } from "./comp.server";
 import {
   ExecutionServiceError,
