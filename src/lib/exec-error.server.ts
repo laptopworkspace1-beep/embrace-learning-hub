@@ -87,21 +87,38 @@ export async function providerFetch(
   init: RequestInit,
   timeoutMs: number,
   isExecution = false,
+  externalSignal?: AbortSignal | null,
 ): Promise<Response> {
   const controller = new AbortController();
   const budget = Math.min(Math.max(timeoutMs || 20_000, 2_000), 60_000);
   const timer = setTimeout(() => controller.abort(), budget);
+  // A caller-owned signal (race loser, student pressed Stop, request closed)
+  // cancels the in-flight HTTP request instead of letting it run to completion.
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+  }
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (err) {
     const aborted = err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message));
+    const cancelled = Boolean(externalSignal?.aborted);
     throw new ExecutionServiceError(
       SERVICE_UNAVAILABLE_MESSAGE,
-      aborted ? `request timed out after ${budget}ms` : err instanceof Error ? err.message : "network failure",
-      aborted && isExecution,
+      cancelled
+        ? "request cancelled"
+        : aborted
+          ? `request timed out after ${budget}ms`
+          : err instanceof Error
+            ? err.message
+            : "network failure",
+      // A cancelled request is deliberate, never an "uncertain" execution.
+      aborted && isExecution && !cancelled,
     );
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", onExternalAbort);
   }
 }
 
@@ -178,8 +195,9 @@ export async function providerJson(
   label: string,
   expectedPath?: string,
   isExecution = false,
+  externalSignal?: AbortSignal | null,
 ): Promise<unknown> {
-  const response = await providerFetch(url, init, timeoutMs, isExecution);
+  const response = await providerFetch(url, init, timeoutMs, isExecution, externalSignal);
   return readProviderJson(response, label, expectedPath);
 }
 

@@ -40,6 +40,8 @@ export type EngineTarget = {
   baseUrl: string;
   apiKey?: string;
   timeoutMs: number;
+  /** Optional cancellation for this call (race losers / student Stop). */
+  signal?: AbortSignal | null;
 };
 
 export type ApiProbe = {
@@ -218,6 +220,7 @@ export const pistonAdapter: ProviderAdapter = {
         `${target.name} execute`,
         undefined,
         true,
+        target.signal ?? null,
       )) as { compile?: PistonStage; run?: PistonStage } | null;
 
     let payload: { compile?: PistonStage; run?: PistonStage } | null;
