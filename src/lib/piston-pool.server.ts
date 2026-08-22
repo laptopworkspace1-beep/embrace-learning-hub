@@ -1161,6 +1161,248 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export type PoolResult = ExecResult & { nodeId: string; assignedNodeId: string; attempts: number };
 
+/* ------------------------------------------------------------------ */
+/* Fast-execution race (interactive Compile / Run only)                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Interactive Compile/Run is raced across the healthy Piston VMs: the first
+ * VALID response wins, is returned immediately, and every other in-flight
+ * request is aborted so its VM slot is released at once.
+ *
+ * Scoring paths (Round 2 / Round 3 evaluate + submit, hidden tests) never
+ * enter this path — they keep the controlled least-loaded router with
+ * failover, so a program is executed exactly once per test case.
+ */
+const RACE_DEADLINE_MS = 5_000;
+const RACE_MAX_NODES = 4;
+
+function raceEnabled(): boolean {
+  return String(process.env["PISTON_RACE_ENABLED"] ?? "true").toLowerCase() !== "false";
+}
+
+function raceMaxConcurrent(): number {
+  const raw = Number(process.env["PISTON_RACE_MAX_CONCURRENT_REQUESTS"] ?? 12);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 12;
+}
+
+/** Races currently in flight on this worker — the load-protection valve. */
+let raceInFlight = 0;
+
+/** The student's own request signal, when the runtime exposes one. */
+async function requestSignal(): Promise<AbortSignal | null> {
+  try {
+    const { getRequest } = await import("@tanstack/react-start/server");
+    return getRequest()?.signal ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Only interactive Compile / Run may be raced. */
+function raceEligible(input: ExecInput): boolean {
+  return String(input.purpose ?? "") === "RUN";
+}
+
+/**
+ * Returns the winning result, or `null` when the race is not applicable
+ * (disabled, not interactive, too few healthy VMs, or the concurrency valve is
+ * closed) so the caller continues with the normal controlled router.
+ */
+async function raceOnPistonPool(
+  input: ExecInput,
+  nodes: PistonNode[],
+  assigned: string | null,
+): Promise<PoolResult | null> {
+  if (!raceEnabled() || !raceEligible(input)) return null;
+
+  // Load protection: only ONLINE VMs with spare capacity may be raced.
+  const eligible = nodes
+    .filter((node) => node.healthStatus === "ONLINE" && node.currentLoad < node.maxConcurrentJobs)
+    .slice(0, RACE_MAX_NODES);
+  if (eligible.length < 2) return null;
+  if (raceInFlight >= raceMaxConcurrent()) {
+    console.warn(
+      `[piston-race] concurrency limit reached (${raceInFlight}/${raceMaxConcurrent()}) — ` +
+        "falling back to the least-loaded node strategy",
+    );
+    return null;
+  }
+
+  const executionRequestId = globalThis.crypto.randomUUID();
+  raceInFlight += 1;
+  const t0 = Date.now();
+
+  // Capacity slots are claimed up front; every one of them is released again
+  // on every exit path below (win, loss, failure, cancel, timeout, throw).
+  const claimed: PistonNode[] = [];
+  for (const node of eligible) {
+    if (await acquireSlot(node.nodeId)) claimed.push(node);
+  }
+  if (claimed.length < 2) {
+    await Promise.all(claimed.map((node) => releaseSlot(node.nodeId)));
+    raceInFlight -= 1;
+    return null;
+  }
+
+  const controllers = new Map<string, AbortController>();
+  const cancelled: string[] = [];
+  const failures: string[] = [];
+  let completed = false;
+  let timedOut = false;
+
+  const abortAll = () => {
+    for (const controller of controllers.values()) controller.abort();
+  };
+  const deadlineTimer = setTimeout(() => {
+    timedOut = true;
+    abortAll();
+  }, RACE_DEADLINE_MS);
+  const clientSignal = await requestSignal();
+  const onClientAbort = () => {
+    // Student pressed "Stop running" (or the browser went away): cancel every
+    // raced request immediately instead of letting the VMs finish the work.
+    abortAll();
+  };
+  if (clientSignal) {
+    if (clientSignal.aborted) abortAll();
+    else clientSignal.addEventListener("abort", onClientAbort, { once: true });
+  }
+
+  type Attempt = { result: ExecResult; nodeId: string; ms: number } | null;
+
+  const attempts = claimed.map(async (node): Promise<Attempt> => {
+    const controller = new AbortController();
+    controllers.set(node.nodeId, controller);
+    const started = Date.now();
+    const startedAt = new Date().toISOString();
+    let slotReleased = false;
+    try {
+      const result = await pistonAdapter.execute(
+        {
+          id: node.id,
+          name: node.nodeId,
+          provider: "PISTON",
+          baseUrl: node.url,
+          timeoutMs: Math.min(node.timeoutMs || EXEC_BUDGET_MS, RACE_DEADLINE_MS),
+          signal: controller.signal,
+        },
+        input,
+      );
+      // Atomic completion flag: only the FIRST valid response may finish the
+      // request. A late answer is dropped without persisting anything.
+      if (completed) {
+        cancelled.push(node.nodeId);
+        return null;
+      }
+      completed = true;
+      for (const [nodeId, other] of controllers) {
+        if (nodeId !== node.nodeId && !other.signal.aborted) {
+          other.abort();
+          cancelled.push(nodeId);
+        }
+      }
+      const ms = Date.now() - started;
+      slotReleased = await recordRun(
+        node.nodeId,
+        null,
+        {
+          submissionId: input.submissionId ?? null,
+          studentId: String(input.studentId ?? "") || null,
+          roundId: String(input.roundId ?? "") || null,
+          assignedNodeId: assigned ?? "",
+          actualNodeId: node.nodeId,
+          startedAt,
+          endedAt: new Date().toISOString(),
+          durationMs: ms,
+          queueMs: 0,
+          retryCount: 0,
+          status: result.status ?? "ACCEPTED",
+          failureReason: "",
+        },
+        null,
+      );
+      return { result, nodeId: node.nodeId, ms };
+    } catch (err) {
+      const error =
+        err instanceof ExecutionServiceError
+          ? err
+          : new ExecutionServiceError(
+              "Code execution is temporarily unavailable. Please try again.",
+              err instanceof Error ? err.message : "unknown execution failure",
+            );
+      if (err instanceof LanguageUnavailableError) throw err;
+      if (controller.signal.aborted) {
+        // Deliberate cancellation (lost the race, deadline or Stop): not a VM
+        // fault, so no failure counter and no execution row.
+        return null;
+      }
+      // Infrastructure failure: recorded so node health stays truthful, and
+      // simply ignored by the race — another VM may still answer.
+      failures.push(`${node.nodeId}=${error.detail}`);
+      slotReleased = await recordRun(
+        node.nodeId,
+        error.detail,
+        {
+          submissionId: input.submissionId ?? null,
+          studentId: String(input.studentId ?? "") || null,
+          roundId: String(input.roundId ?? "") || null,
+          assignedNodeId: assigned ?? "",
+          actualNodeId: node.nodeId,
+          startedAt,
+          endedAt: new Date().toISOString(),
+          durationMs: Date.now() - started,
+          queueMs: 0,
+          retryCount: 0,
+          status: "INFRASTRUCTURE_ERROR",
+          failureReason: error.detail,
+        },
+        null,
+      );
+      return null;
+    } finally {
+      // Guaranteed slot cleanup — win, loss, failure, cancellation or timeout.
+      if (!slotReleased) await releaseSlot(node.nodeId);
+    }
+  });
+
+  try {
+    const settled = await Promise.all(attempts);
+    const winner = settled.find((entry): entry is NonNullable<Attempt> => entry !== null);
+    const totalMs = Date.now() - t0;
+    console.info(
+      `[piston-race] request=${executionRequestId} vms=[${claimed.map((n) => n.nodeId).join(",")}] ` +
+        `winner=${winner?.nodeId ?? "none"} firstResponseMs=${winner?.ms ?? -1} totalMs=${totalMs} ` +
+        `cancelled=[${[...new Set(cancelled)].join(",")}] failures=[${failures.join("; ")}]`,
+    );
+    if (winner) {
+      return {
+        ...winner.result,
+        nodeId: winner.nodeId,
+        assignedNodeId: assigned ?? winner.nodeId,
+        attempts: claimed.length,
+      };
+    }
+    if (clientSignal?.aborted) {
+      throw new ExecutionServiceError("Execution cancelled.", "student stopped the execution");
+    }
+    if (timedOut) {
+      throw new ExecutionServiceError(
+        "Execution timed out. Please try again.",
+        `no Piston VM answered within ${RACE_DEADLINE_MS}ms (${claimed.length} raced)`,
+      );
+    }
+    throw new ExecutionServiceError(
+      "Code execution is temporarily unavailable. Please try again.",
+      `every raced Piston VM failed: ${failures.join("; ") || "unknown"}`,
+    );
+  } finally {
+    clearTimeout(deadlineTimer);
+    if (clientSignal) clientSignal.removeEventListener("abort", onClientAbort);
+    raceInFlight -= 1;
+  }
+}
+
 /**
  * Runs one program on the pool.
  *
