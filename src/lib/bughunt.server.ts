@@ -153,13 +153,25 @@ function isBugFixed(bug: Row, sourceCode: string): boolean {
  * definitions that are configured for the problem. Both mechanisms are
  * server-side only.
  */
-export async function evaluateDebugSubmission(input: {
+export type DebugEvaluationInput = {
   studentId: string;
   problem: Row;
   sourceCode: string;
   isFinal?: boolean;
   language?: string;
-}): Promise<DebugEvaluation> {
+};
+
+/**
+ * Identical concurrent requests (double click, retry, re-render) join the
+ * evaluation that is already running instead of starting a second one.
+ */
+export function evaluateDebugSubmission(input: DebugEvaluationInput): Promise<DebugEvaluation> {
+  const key = `r2:${input.studentId}:${str(input.problem["id"])}:${input.language ?? ""}:${fingerprint(input.sourceCode)}`;
+  return dedupe(key, () => runDebugEvaluation(input));
+}
+
+async function runDebugEvaluation(input: DebugEvaluationInput): Promise<DebugEvaluation> {
+
   const db = ownDb();
   const problemId = str(input.problem["id"]);
   const now = nowIso();
