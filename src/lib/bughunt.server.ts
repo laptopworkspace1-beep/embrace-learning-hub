@@ -274,6 +274,18 @@ export async function evaluateDebugSubmission(input: {
     testCases,
   };
 
+  const baseText = `Base ${baseScore}/${baseMarks}`;
+  const message = !execution.serviceAvailable
+    ? `Submission saved. ${execution.message}`
+    : !execution.compiled
+      ? "Submission recorded — compilation failed."
+      : judged
+        ? `${baseText} · ${judged.passed}/${judged.total} hidden test case(s) passed.`
+        : `${baseText} · no hidden test cases configured.`;
+
+  // Single write: the final score, breakdown and message are persisted in one
+  // round trip instead of an insert followed by an update.
+  const dbStart = Date.now();
   const { error: subError } = await db.from("debugging_submissions").insert({
     id: submissionId,
     studentId: input.studentId,
@@ -284,11 +296,11 @@ export async function evaluateDebugSubmission(input: {
     language,
     isFinal: input.isFinal ?? false,
     submittedAt: now,
-    score: 0,
+    score: totalScore,
     baseScore,
     testCaseScore,
     resultJson: breakdown,
-    message: "",
+    message,
     status: judged?.status ?? execution.status,
     testsPassed: judged?.passed ?? 0,
     testsTotal: judged?.total ?? 0,
@@ -304,60 +316,57 @@ export async function evaluateDebugSubmission(input: {
     throw new Error("Could not record your submission. Please try again.");
   }
 
-  const [{ data: bugs }, { data: awards }] = await Promise.all([
-    db.from("bug_definitions").select("*").eq("problemId", problemId).order("orderNo"),
-    db
-      .from("bug_awards")
-      .select("bugDefinitionId")
-      .eq("studentId", input.studentId)
-      .eq("problemId", problemId),
-  ]);
-  const already = new Set((awards ?? []).map((a) => str((a as Row)["bugDefinitionId"])));
-
   const newlyFixed: BugFixSummary[] = [];
   let awardedNow = 0;
 
+  // Legacy bug definitions only matter when the program actually compiled.
   if (execution.serviceAvailable && execution.compiled) {
-    for (const raw of bugs ?? []) {
-      const bug = raw as Row;
-      const bugId = str(bug["id"]);
-      if (bug["isActive"] === false) continue;
-      if (already.has(bugId)) continue;
-      if (!isBugFixed(bug, input.sourceCode)) continue;
+    const [{ data: bugs }, { data: awards }] = await Promise.all([
+      db.from("bug_definitions").select("*").eq("problemId", problemId).order("orderNo"),
+      db
+        .from("bug_awards")
+        .select("bugDefinitionId")
+        .eq("studentId", input.studentId)
+        .eq("problemId", problemId),
+    ]);
+    const already = new Set((awards ?? []).map((a) => str((a as Row)["bugDefinitionId"])));
+    const candidates = ((bugs ?? []) as Row[]).filter(
+      (bug) =>
+        bug["isActive"] !== false &&
+        !already.has(str(bug["id"])) &&
+        isBugFixed(bug, input.sourceCode),
+    );
 
-      const marks = num(bug["marks"]);
-      const { error } = await db.from("bug_awards").insert({
-        id: newId(),
-        studentId: input.studentId,
-        problemId,
-        submissionId,
-        bugDefinitionId: bugId,
-        marksAwarded: marks,
-        createdAt: nowIso(),
-      });
-      // 23505 = a concurrent submission already awarded this bug; never award twice.
-      if (error) {
-        if (error.code !== "23505") console.error("[bughunt] award insert failed", error.message);
-        continue;
-      }
-      awardedNow += marks;
-      newlyFixed.push({ bugCode: str(bug["bugCode"]), title: str(bug["title"]), marks });
+    const inserted = await Promise.all(
+      candidates.map(async (bug) => {
+        const marks = num(bug["marks"]);
+        const { error } = await db.from("bug_awards").insert({
+          id: newId(),
+          studentId: input.studentId,
+          problemId,
+          submissionId,
+          bugDefinitionId: str(bug["id"]),
+          marksAwarded: marks,
+          createdAt: nowIso(),
+        });
+        // 23505 = a concurrent submission already awarded this bug; never award twice.
+        if (error) {
+          if (error.code !== "23505") console.error("[bughunt] award insert failed", error.message);
+          return null;
+        }
+        return { bugCode: str(bug["bugCode"]), title: str(bug["title"]), marks };
+      }),
+    );
+    for (const award of inserted) {
+      if (!award) continue;
+      awardedNow += award.marks;
+      newlyFixed.push(award);
     }
   }
+  console.info(
+    `[bughunt] evaluate compileMs=${compileMs} testMs=${testMs} dbMs=${Date.now() - dbStart} totalMs=${Date.now() - compileStart} tests=${tests.length}`,
+  );
 
-  const baseText = `Base ${baseScore}/${baseMarks}`;
-  const message = !execution.serviceAvailable
-    ? `Submission saved. ${execution.message}`
-    : judged
-      ? `${baseText} · ${judged.passed}/${judged.total} hidden test case(s) passed.`
-      : execution.compiled
-        ? `${baseText} · no hidden test cases configured.`
-        : "Submission recorded — compilation failed.";
-
-  await db
-    .from("debugging_submissions")
-    .update({ score: totalScore, message, updatedAt: nowIso() })
-    .eq("id", submissionId);
 
   return {
     submissionId,
