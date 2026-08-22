@@ -59,7 +59,20 @@ export async function judgeSubmission(
   tests: Row[],
   problem: Row,
   /** Optional execution context: drives sticky Piston node assignment + logging. */
-  ctx: { studentId?: string | null; roundId?: string | null; submissionId?: string | null } = {},
+  ctx: {
+    studentId?: string | null;
+    roundId?: string | null;
+    submissionId?: string | null;
+    /**
+     * The caller already compiled this exact source successfully (Round 2 base
+     * execution), so the extra sequential compile probe is skipped and every
+     * test case starts in the first parallel wave.
+     */
+    assumeCompiled?: boolean;
+    /** Upper bound on simultaneous test-case runs across the VM pool. */
+    concurrency?: number;
+  } = {},
+
 ): Promise<JudgeResult> {
   const total = tests.length;
   const base = {
