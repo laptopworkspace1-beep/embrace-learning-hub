@@ -59,7 +59,20 @@ export async function judgeSubmission(
   tests: Row[],
   problem: Row,
   /** Optional execution context: drives sticky Piston node assignment + logging. */
-  ctx: { studentId?: string | null; roundId?: string | null; submissionId?: string | null } = {},
+  ctx: {
+    studentId?: string | null;
+    roundId?: string | null;
+    submissionId?: string | null;
+    /**
+     * The caller already compiled this exact source successfully (Round 2 base
+     * execution), so the extra sequential compile probe is skipped and every
+     * test case starts in the first parallel wave.
+     */
+    assumeCompiled?: boolean;
+    /** Upper bound on simultaneous test-case runs across the VM pool. */
+    concurrency?: number;
+  } = {},
+
 ): Promise<JudgeResult> {
   const total = tests.length;
   const base = {
@@ -100,20 +113,24 @@ export async function judgeSubmission(
   let status: SubmissionStatus = "ACCEPTED";
   let message = "All test cases passed.";
 
-  // Test cases are independent programs, so they are no longer run strictly one
-  // after another: up to JUDGE_CONCURRENCY of them are sent to the execution
-  // pool at once, which turns an N-test submission from N sequential round
-  // trips into ceil(N / JUDGE_CONCURRENCY). The pool still enforces per-node
-  // capacity, so this can never oversubscribe a VM.
-  const JUDGE_CONCURRENCY = 4;
+  /*
+   * Test cases are independent programs, so they are spread across the four
+   * Piston VMs by a continuous worker pool instead of lock-step waves: as soon
+   * as one test finishes its worker picks up the next queued test. The pool
+   * still enforces each VM's maxConcurrentJobs, so this can never oversubscribe
+   * a node. A compilation failure stops the whole evaluation immediately.
+   */
+  const JUDGE_CONCURRENCY = Math.max(1, Math.min(ctx.concurrency ?? 8, 12));
   type Run = Awaited<ReturnType<typeof executeCode>>;
   const runs = new Array<Run | undefined>(tests.length);
   let infra: unknown = null;
+  let compileFailed = false;
+  const startedAt = Date.now();
 
   const execAt = async (i: number) => {
     const test = tests[i] as Row;
     try {
-      runs[i] = await executeCode({
+      const run = await executeCode({
         language,
         code,
         stdin: str(test["input"]),
@@ -124,23 +141,38 @@ export async function judgeSubmission(
         submissionId: ctx.submissionId ?? null,
         purpose: "SUBMIT",
       });
+      runs[i] = run;
+      if (run.outcome === "compilation_error") compileFailed = true;
     } catch (err) {
       infra ??= err;
     }
   };
 
-  // The first test runs on its own: if the program does not compile, every
-  // other test is pointless and no pool capacity is spent on them.
-  await execAt(0);
-  const compileFailedFirst = runs[0]?.outcome === "compilation_error";
-  if (!infra && !compileFailedFirst) {
-    for (let start = 1; start < tests.length; start += JUDGE_CONCURRENCY) {
-      if (infra) break;
-      await Promise.all(
-        tests.slice(start, start + JUDGE_CONCURRENCY).map((_, k) => execAt(start + k)),
-      );
-    }
+  let compileProbeMs = 0;
+  let next = 0;
+  if (!ctx.assumeCompiled) {
+    // Unknown compilation state: the first test runs on its own so a program
+    // that does not compile never spends pool capacity on the other tests.
+    await execAt(0);
+    compileProbeMs = Date.now() - startedAt;
+    next = 1;
   }
+  if (!infra && !compileFailed) {
+    const worker = async () => {
+      while (!infra && !compileFailed) {
+        const i = next++;
+        if (i >= tests.length) return;
+        await execAt(i);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(JUDGE_CONCURRENCY, Math.max(0, tests.length - next)) }, worker),
+    );
+  }
+  console.info(
+    `[judge] tests=${tests.length} concurrency=${JUDGE_CONCURRENCY} compileProbeMs=${compileProbeMs} totalMs=${Date.now() - startedAt}${compileFailed ? " compileFailed" : ""}`,
+  );
+
 
   if (infra) {
     // Infrastructure failure: the participant is never penalised for it.
