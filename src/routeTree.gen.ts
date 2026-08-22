@@ -10,33 +10,426 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ConfigurationRouteImport } from './routes/configuration'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedResultsRouteImport } from './routes/_authenticated/results'
+import { Route as AuthenticatedSubmissionsRouteImport } from './routes/_authenticated/submissions'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as AuthenticatedAdminAuditRouteImport } from './routes/_authenticated/admin.audit'
+import { Route as AuthenticatedAdminEnginesRouteImport } from './routes/_authenticated/admin.engines'
+import { Route as AuthenticatedAdminEventRouteImport } from './routes/_authenticated/admin.event'
+import { Route as AuthenticatedAdminHomepageRouteImport } from './routes/_authenticated/admin.homepage'
+import { Route as AuthenticatedAdminInfrastructureRouteImport } from './routes/_authenticated/admin.infrastructure'
+import { Route as AuthenticatedAdminLeaderboardRouteImport } from './routes/_authenticated/admin.leaderboard'
+import { Route as AuthenticatedAdminMonitorRouteImport } from './routes/_authenticated/admin.monitor'
+import { Route as AuthenticatedAdminRound1RouteImport } from './routes/_authenticated/admin.round1'
+import { Route as AuthenticatedAdminRound2RouteImport } from './routes/_authenticated/admin.round2'
+import { Route as AuthenticatedAdminRound3RouteImport } from './routes/_authenticated/admin.round3'
+import { Route as AuthenticatedAdminRoundsRouteImport } from './routes/_authenticated/admin.rounds'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
+import { Route as AuthenticatedAdminSubmissionsRouteImport } from './routes/_authenticated/admin.submissions'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
+import { Route as AuthenticatedAdminViolationsRouteImport } from './routes/_authenticated/admin.violations'
+import { Route as AuthenticatedProblemsProblemIdRouteImport } from './routes/_authenticated/problems.$problemId'
+import { Route as AuthenticatedRoundsRoundIdRouteImport } from './routes/_authenticated/rounds.$roundId'
+import { Route as ApiBootstrapActionRouteImport } from './routes/api/bootstrap.$action'
+import { Route as ApiConfigurationStatusRouteImport } from './routes/api/configuration/status'
+import { Route as ApiPublicHealthRouteImport } from './routes/api/public/health'
+import { Route as ApiPublicPistonProbeRouteImport } from './routes/api/public/piston-probe'
+import { Route as ApiPublicBootstrapActionRouteImport } from './routes/api/public/bootstrap.$action'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfigurationRoute = ConfigurationRouteImport.update({
+  id: '/configuration',
+  path: '/configuration',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedResultsRoute = AuthenticatedResultsRouteImport.update({
+  id: '/results',
+  path: '/results',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSubmissionsRoute =
+  AuthenticatedSubmissionsRouteImport.update({
+    id: '/submissions',
+    path: '/submissions',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminAuditRoute = AuthenticatedAdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminEnginesRoute =
+  AuthenticatedAdminEnginesRouteImport.update({
+    id: '/engines',
+    path: '/engines',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminEventRoute = AuthenticatedAdminEventRouteImport.update({
+  id: '/event',
+  path: '/event',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminHomepageRoute =
+  AuthenticatedAdminHomepageRouteImport.update({
+    id: '/homepage',
+    path: '/homepage',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminInfrastructureRoute =
+  AuthenticatedAdminInfrastructureRouteImport.update({
+    id: '/infrastructure',
+    path: '/infrastructure',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminLeaderboardRoute =
+  AuthenticatedAdminLeaderboardRouteImport.update({
+    id: '/leaderboard',
+    path: '/leaderboard',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminMonitorRoute =
+  AuthenticatedAdminMonitorRouteImport.update({
+    id: '/monitor',
+    path: '/monitor',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminRound1Route =
+  AuthenticatedAdminRound1RouteImport.update({
+    id: '/round1',
+    path: '/round1',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminRound2Route =
+  AuthenticatedAdminRound2RouteImport.update({
+    id: '/round2',
+    path: '/round2',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminRound3Route =
+  AuthenticatedAdminRound3RouteImport.update({
+    id: '/round3',
+    path: '/round3',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminRoundsRoute =
+  AuthenticatedAdminRoundsRouteImport.update({
+    id: '/rounds',
+    path: '/rounds',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminSubmissionsRoute =
+  AuthenticatedAdminSubmissionsRouteImport.update({
+    id: '/submissions',
+    path: '/submissions',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminViolationsRoute =
+  AuthenticatedAdminViolationsRouteImport.update({
+    id: '/violations',
+    path: '/violations',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedProblemsProblemIdRoute =
+  AuthenticatedProblemsProblemIdRouteImport.update({
+    id: '/problems/$problemId',
+    path: '/problems/$problemId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedRoundsRoundIdRoute =
+  AuthenticatedRoundsRoundIdRouteImport.update({
+    id: '/rounds/$roundId',
+    path: '/rounds/$roundId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const ApiBootstrapActionRoute = ApiBootstrapActionRouteImport.update({
+  id: '/api/bootstrap/$action',
+  path: '/api/bootstrap/$action',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiConfigurationStatusRoute = ApiConfigurationStatusRouteImport.update({
+  id: '/api/configuration/status',
+  path: '/api/configuration/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicHealthRoute = ApiPublicHealthRouteImport.update({
+  id: '/api/public/health',
+  path: '/api/public/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicPistonProbeRoute = ApiPublicPistonProbeRouteImport.update({
+  id: '/api/public/piston-probe',
+  path: '/api/public/piston-probe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicBootstrapActionRoute =
+  ApiPublicBootstrapActionRouteImport.update({
+    id: '/api/public/bootstrap/$action',
+    path: '/api/public/bootstrap/$action',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/configuration': typeof ConfigurationRoute
+  '/admin': typeof AuthenticatedAdminRouteWithChildren
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/profile': typeof AuthenticatedProfileRoute
+  '/results': typeof AuthenticatedResultsRoute
+  '/submissions': typeof AuthenticatedSubmissionsRoute
+  '/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/admin/engines': typeof AuthenticatedAdminEnginesRoute
+  '/admin/event': typeof AuthenticatedAdminEventRoute
+  '/admin/homepage': typeof AuthenticatedAdminHomepageRoute
+  '/admin/infrastructure': typeof AuthenticatedAdminInfrastructureRoute
+  '/admin/leaderboard': typeof AuthenticatedAdminLeaderboardRoute
+  '/admin/monitor': typeof AuthenticatedAdminMonitorRoute
+  '/admin/round1': typeof AuthenticatedAdminRound1Route
+  '/admin/round2': typeof AuthenticatedAdminRound2Route
+  '/admin/round3': typeof AuthenticatedAdminRound3Route
+  '/admin/rounds': typeof AuthenticatedAdminRoundsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/submissions': typeof AuthenticatedAdminSubmissionsRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/admin/violations': typeof AuthenticatedAdminViolationsRoute
+  '/problems/$problemId': typeof AuthenticatedProblemsProblemIdRoute
+  '/rounds/$roundId': typeof AuthenticatedRoundsRoundIdRoute
+  '/api/bootstrap/$action': typeof ApiBootstrapActionRoute
+  '/api/configuration/status': typeof ApiConfigurationStatusRoute
+  '/api/public/health': typeof ApiPublicHealthRoute
+  '/api/public/piston-probe': typeof ApiPublicPistonProbeRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/api/public/bootstrap/$action': typeof ApiPublicBootstrapActionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/configuration': typeof ConfigurationRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/profile': typeof AuthenticatedProfileRoute
+  '/results': typeof AuthenticatedResultsRoute
+  '/submissions': typeof AuthenticatedSubmissionsRoute
+  '/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/admin/engines': typeof AuthenticatedAdminEnginesRoute
+  '/admin/event': typeof AuthenticatedAdminEventRoute
+  '/admin/homepage': typeof AuthenticatedAdminHomepageRoute
+  '/admin/infrastructure': typeof AuthenticatedAdminInfrastructureRoute
+  '/admin/leaderboard': typeof AuthenticatedAdminLeaderboardRoute
+  '/admin/monitor': typeof AuthenticatedAdminMonitorRoute
+  '/admin/round1': typeof AuthenticatedAdminRound1Route
+  '/admin/round2': typeof AuthenticatedAdminRound2Route
+  '/admin/round3': typeof AuthenticatedAdminRound3Route
+  '/admin/rounds': typeof AuthenticatedAdminRoundsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/submissions': typeof AuthenticatedAdminSubmissionsRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/admin/violations': typeof AuthenticatedAdminViolationsRoute
+  '/problems/$problemId': typeof AuthenticatedProblemsProblemIdRoute
+  '/rounds/$roundId': typeof AuthenticatedRoundsRoundIdRoute
+  '/api/bootstrap/$action': typeof ApiBootstrapActionRoute
+  '/api/configuration/status': typeof ApiConfigurationStatusRoute
+  '/api/public/health': typeof ApiPublicHealthRoute
+  '/api/public/piston-probe': typeof ApiPublicPistonProbeRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
+  '/api/public/bootstrap/$action': typeof ApiPublicBootstrapActionRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/configuration': typeof ConfigurationRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/_authenticated/results': typeof AuthenticatedResultsRoute
+  '/_authenticated/submissions': typeof AuthenticatedSubmissionsRoute
+  '/_authenticated/admin/audit': typeof AuthenticatedAdminAuditRoute
+  '/_authenticated/admin/engines': typeof AuthenticatedAdminEnginesRoute
+  '/_authenticated/admin/event': typeof AuthenticatedAdminEventRoute
+  '/_authenticated/admin/homepage': typeof AuthenticatedAdminHomepageRoute
+  '/_authenticated/admin/infrastructure': typeof AuthenticatedAdminInfrastructureRoute
+  '/_authenticated/admin/leaderboard': typeof AuthenticatedAdminLeaderboardRoute
+  '/_authenticated/admin/monitor': typeof AuthenticatedAdminMonitorRoute
+  '/_authenticated/admin/round1': typeof AuthenticatedAdminRound1Route
+  '/_authenticated/admin/round2': typeof AuthenticatedAdminRound2Route
+  '/_authenticated/admin/round3': typeof AuthenticatedAdminRound3Route
+  '/_authenticated/admin/rounds': typeof AuthenticatedAdminRoundsRoute
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/_authenticated/admin/submissions': typeof AuthenticatedAdminSubmissionsRoute
+  '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/_authenticated/admin/violations': typeof AuthenticatedAdminViolationsRoute
+  '/_authenticated/problems/$problemId': typeof AuthenticatedProblemsProblemIdRoute
+  '/_authenticated/rounds/$roundId': typeof AuthenticatedRoundsRoundIdRoute
+  '/api/bootstrap/$action': typeof ApiBootstrapActionRoute
+  '/api/configuration/status': typeof ApiConfigurationStatusRoute
+  '/api/public/health': typeof ApiPublicHealthRoute
+  '/api/public/piston-probe': typeof ApiPublicPistonProbeRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/api/public/bootstrap/$action': typeof ApiPublicBootstrapActionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/configuration'
+    | '/admin'
+    | '/dashboard'
+    | '/profile'
+    | '/results'
+    | '/submissions'
+    | '/admin/audit'
+    | '/admin/engines'
+    | '/admin/event'
+    | '/admin/homepage'
+    | '/admin/infrastructure'
+    | '/admin/leaderboard'
+    | '/admin/monitor'
+    | '/admin/round1'
+    | '/admin/round2'
+    | '/admin/round3'
+    | '/admin/rounds'
+    | '/admin/settings'
+    | '/admin/submissions'
+    | '/admin/users'
+    | '/admin/violations'
+    | '/problems/$problemId'
+    | '/rounds/$roundId'
+    | '/api/bootstrap/$action'
+    | '/api/configuration/status'
+    | '/api/public/health'
+    | '/api/public/piston-probe'
+    | '/admin/'
+    | '/api/public/bootstrap/$action'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/configuration'
+    | '/dashboard'
+    | '/profile'
+    | '/results'
+    | '/submissions'
+    | '/admin/audit'
+    | '/admin/engines'
+    | '/admin/event'
+    | '/admin/homepage'
+    | '/admin/infrastructure'
+    | '/admin/leaderboard'
+    | '/admin/monitor'
+    | '/admin/round1'
+    | '/admin/round2'
+    | '/admin/round3'
+    | '/admin/rounds'
+    | '/admin/settings'
+    | '/admin/submissions'
+    | '/admin/users'
+    | '/admin/violations'
+    | '/problems/$problemId'
+    | '/rounds/$roundId'
+    | '/api/bootstrap/$action'
+    | '/api/configuration/status'
+    | '/api/public/health'
+    | '/api/public/piston-probe'
+    | '/admin'
+    | '/api/public/bootstrap/$action'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/configuration'
+    | '/_authenticated/admin'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/profile'
+    | '/_authenticated/results'
+    | '/_authenticated/submissions'
+    | '/_authenticated/admin/audit'
+    | '/_authenticated/admin/engines'
+    | '/_authenticated/admin/event'
+    | '/_authenticated/admin/homepage'
+    | '/_authenticated/admin/infrastructure'
+    | '/_authenticated/admin/leaderboard'
+    | '/_authenticated/admin/monitor'
+    | '/_authenticated/admin/round1'
+    | '/_authenticated/admin/round2'
+    | '/_authenticated/admin/round3'
+    | '/_authenticated/admin/rounds'
+    | '/_authenticated/admin/settings'
+    | '/_authenticated/admin/submissions'
+    | '/_authenticated/admin/users'
+    | '/_authenticated/admin/violations'
+    | '/_authenticated/problems/$problemId'
+    | '/_authenticated/rounds/$roundId'
+    | '/api/bootstrap/$action'
+    | '/api/configuration/status'
+    | '/api/public/health'
+    | '/api/public/piston-probe'
+    | '/_authenticated/admin/'
+    | '/api/public/bootstrap/$action'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
+  ConfigurationRoute: typeof ConfigurationRoute
+  ApiBootstrapActionRoute: typeof ApiBootstrapActionRoute
+  ApiConfigurationStatusRoute: typeof ApiConfigurationStatusRoute
+  ApiPublicHealthRoute: typeof ApiPublicHealthRoute
+  ApiPublicPistonProbeRoute: typeof ApiPublicPistonProbeRoute
+  ApiPublicBootstrapActionRoute: typeof ApiPublicBootstrapActionRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +441,300 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/configuration': {
+      id: '/configuration'
+      path: '/configuration'
+      fullPath: '/configuration'
+      preLoaderRoute: typeof ConfigurationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/results': {
+      id: '/_authenticated/results'
+      path: '/results'
+      fullPath: '/results'
+      preLoaderRoute: typeof AuthenticatedResultsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/submissions': {
+      id: '/_authenticated/submissions'
+      path: '/submissions'
+      fullPath: '/submissions'
+      preLoaderRoute: typeof AuthenticatedSubmissionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/audit': {
+      id: '/_authenticated/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AuthenticatedAdminAuditRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/engines': {
+      id: '/_authenticated/admin/engines'
+      path: '/engines'
+      fullPath: '/admin/engines'
+      preLoaderRoute: typeof AuthenticatedAdminEnginesRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/event': {
+      id: '/_authenticated/admin/event'
+      path: '/event'
+      fullPath: '/admin/event'
+      preLoaderRoute: typeof AuthenticatedAdminEventRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/homepage': {
+      id: '/_authenticated/admin/homepage'
+      path: '/homepage'
+      fullPath: '/admin/homepage'
+      preLoaderRoute: typeof AuthenticatedAdminHomepageRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/infrastructure': {
+      id: '/_authenticated/admin/infrastructure'
+      path: '/infrastructure'
+      fullPath: '/admin/infrastructure'
+      preLoaderRoute: typeof AuthenticatedAdminInfrastructureRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/leaderboard': {
+      id: '/_authenticated/admin/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/admin/leaderboard'
+      preLoaderRoute: typeof AuthenticatedAdminLeaderboardRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/monitor': {
+      id: '/_authenticated/admin/monitor'
+      path: '/monitor'
+      fullPath: '/admin/monitor'
+      preLoaderRoute: typeof AuthenticatedAdminMonitorRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/round1': {
+      id: '/_authenticated/admin/round1'
+      path: '/round1'
+      fullPath: '/admin/round1'
+      preLoaderRoute: typeof AuthenticatedAdminRound1RouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/round2': {
+      id: '/_authenticated/admin/round2'
+      path: '/round2'
+      fullPath: '/admin/round2'
+      preLoaderRoute: typeof AuthenticatedAdminRound2RouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/round3': {
+      id: '/_authenticated/admin/round3'
+      path: '/round3'
+      fullPath: '/admin/round3'
+      preLoaderRoute: typeof AuthenticatedAdminRound3RouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/rounds': {
+      id: '/_authenticated/admin/rounds'
+      path: '/rounds'
+      fullPath: '/admin/rounds'
+      preLoaderRoute: typeof AuthenticatedAdminRoundsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/submissions': {
+      id: '/_authenticated/admin/submissions'
+      path: '/submissions'
+      fullPath: '/admin/submissions'
+      preLoaderRoute: typeof AuthenticatedAdminSubmissionsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/violations': {
+      id: '/_authenticated/admin/violations'
+      path: '/violations'
+      fullPath: '/admin/violations'
+      preLoaderRoute: typeof AuthenticatedAdminViolationsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/problems/$problemId': {
+      id: '/_authenticated/problems/$problemId'
+      path: '/problems/$problemId'
+      fullPath: '/problems/$problemId'
+      preLoaderRoute: typeof AuthenticatedProblemsProblemIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/rounds/$roundId': {
+      id: '/_authenticated/rounds/$roundId'
+      path: '/rounds/$roundId'
+      fullPath: '/rounds/$roundId'
+      preLoaderRoute: typeof AuthenticatedRoundsRoundIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/bootstrap/$action': {
+      id: '/api/bootstrap/$action'
+      path: '/api/bootstrap/$action'
+      fullPath: '/api/bootstrap/$action'
+      preLoaderRoute: typeof ApiBootstrapActionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/configuration/status': {
+      id: '/api/configuration/status'
+      path: '/api/configuration/status'
+      fullPath: '/api/configuration/status'
+      preLoaderRoute: typeof ApiConfigurationStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/health': {
+      id: '/api/public/health'
+      path: '/api/public/health'
+      fullPath: '/api/public/health'
+      preLoaderRoute: typeof ApiPublicHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/piston-probe': {
+      id: '/api/public/piston-probe'
+      path: '/api/public/piston-probe'
+      fullPath: '/api/public/piston-probe'
+      preLoaderRoute: typeof ApiPublicPistonProbeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/bootstrap/$action': {
+      id: '/api/public/bootstrap/$action'
+      path: '/api/public/bootstrap/$action'
+      fullPath: '/api/public/bootstrap/$action'
+      preLoaderRoute: typeof ApiPublicBootstrapActionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminAuditRoute: typeof AuthenticatedAdminAuditRoute
+  AuthenticatedAdminEnginesRoute: typeof AuthenticatedAdminEnginesRoute
+  AuthenticatedAdminEventRoute: typeof AuthenticatedAdminEventRoute
+  AuthenticatedAdminHomepageRoute: typeof AuthenticatedAdminHomepageRoute
+  AuthenticatedAdminInfrastructureRoute: typeof AuthenticatedAdminInfrastructureRoute
+  AuthenticatedAdminLeaderboardRoute: typeof AuthenticatedAdminLeaderboardRoute
+  AuthenticatedAdminMonitorRoute: typeof AuthenticatedAdminMonitorRoute
+  AuthenticatedAdminRound1Route: typeof AuthenticatedAdminRound1Route
+  AuthenticatedAdminRound2Route: typeof AuthenticatedAdminRound2Route
+  AuthenticatedAdminRound3Route: typeof AuthenticatedAdminRound3Route
+  AuthenticatedAdminRoundsRoute: typeof AuthenticatedAdminRoundsRoute
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
+  AuthenticatedAdminSubmissionsRoute: typeof AuthenticatedAdminSubmissionsRoute
+  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
+  AuthenticatedAdminViolationsRoute: typeof AuthenticatedAdminViolationsRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
+}
+
+const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminAuditRoute: AuthenticatedAdminAuditRoute,
+  AuthenticatedAdminEnginesRoute: AuthenticatedAdminEnginesRoute,
+  AuthenticatedAdminEventRoute: AuthenticatedAdminEventRoute,
+  AuthenticatedAdminHomepageRoute: AuthenticatedAdminHomepageRoute,
+  AuthenticatedAdminInfrastructureRoute: AuthenticatedAdminInfrastructureRoute,
+  AuthenticatedAdminLeaderboardRoute: AuthenticatedAdminLeaderboardRoute,
+  AuthenticatedAdminMonitorRoute: AuthenticatedAdminMonitorRoute,
+  AuthenticatedAdminRound1Route: AuthenticatedAdminRound1Route,
+  AuthenticatedAdminRound2Route: AuthenticatedAdminRound2Route,
+  AuthenticatedAdminRound3Route: AuthenticatedAdminRound3Route,
+  AuthenticatedAdminRoundsRoute: AuthenticatedAdminRoundsRoute,
+  AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
+  AuthenticatedAdminSubmissionsRoute: AuthenticatedAdminSubmissionsRoute,
+  AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
+  AuthenticatedAdminViolationsRoute: AuthenticatedAdminViolationsRoute,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
+}
+
+const AuthenticatedAdminRouteWithChildren =
+  AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
+
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
+  AuthenticatedResultsRoute: typeof AuthenticatedResultsRoute
+  AuthenticatedSubmissionsRoute: typeof AuthenticatedSubmissionsRoute
+  AuthenticatedProblemsProblemIdRoute: typeof AuthenticatedProblemsProblemIdRoute
+  AuthenticatedRoundsRoundIdRoute: typeof AuthenticatedRoundsRoundIdRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
+  AuthenticatedResultsRoute: AuthenticatedResultsRoute,
+  AuthenticatedSubmissionsRoute: AuthenticatedSubmissionsRoute,
+  AuthenticatedProblemsProblemIdRoute: AuthenticatedProblemsProblemIdRoute,
+  AuthenticatedRoundsRoundIdRoute: AuthenticatedRoundsRoundIdRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
+  ConfigurationRoute: ConfigurationRoute,
+  ApiBootstrapActionRoute: ApiBootstrapActionRoute,
+  ApiConfigurationStatusRoute: ApiConfigurationStatusRoute,
+  ApiPublicHealthRoute: ApiPublicHealthRoute,
+  ApiPublicPistonProbeRoute: ApiPublicPistonProbeRoute,
+  ApiPublicBootstrapActionRoute: ApiPublicBootstrapActionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

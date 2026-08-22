@@ -1,0 +1,13 @@
+import { SQL } from "bun";
+const db = new SQL(process.env["OWN_SUPABASE_DB_URL"]!);
+console.log("students cols", (await db`select column_name,data_type from information_schema.columns where table_schema='public' and table_name='students' order by ordinal_position`).map((r:any)=>r.column_name+":"+r.data_type));
+console.log("counts", await db`select (select count(*) from students) students,(select count(*) from users) users,(select count(*) from users where role='ADMIN') admins,(select count(*) from users where "studentId" is not null) users_with_sid`);
+console.log("sample students", await db`select s.id, s."fullName", s."studentCode", u.username, u."studentId" from students s join users u on u.id=s."userId" order by s."createdAt" limit 5`.catch((e:any)=>String(e).slice(0,200)));
+console.log("rounds", await db`select id,type,name,"orderNo",state,"durationMinutes","maxMarks" from rounds order by "orderNo"`);
+console.log("event", await db`select * from events`);
+console.log("questions", await db`select id,type,"roundId",marks,"negativeMarks","comparisonMethod","correctOptionKey","isEnabled" from questions order by "orderNo"`);
+console.log("dbg", await db`select id,title,marks,"isEnabled" from debugging_problems`);
+console.log("prog", await db`select id,title,marks,"isEnabled" from programming_problems`);
+console.log("tc", await db`select id,"problemId",visibility from test_cases`);
+console.log("admin user", await db`select u.id,u.username,u.role,a."displayName" from users u left join admins a on a."userId"=u.id where u.role='ADMIN'`);
+await db.end();
