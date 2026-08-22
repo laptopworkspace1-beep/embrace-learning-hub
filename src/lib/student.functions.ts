@@ -611,8 +611,13 @@ export const submitDebugFix = createServerFn({ method: "POST" }).middleware([api
       problem,
       sourceCode: data.sourceCode,
     });
-    if (state.progress) await saveDraft(state.progress, data.problemId, data.sourceCode);
-    const roundScore = await recalcRoundScore(claims.studentId, round);
+    // Draft persistence and the round-score rollup are independent of each
+    // other, so the student never waits for them one after the other.
+    const [, roundScore] = await Promise.all([
+      state.progress ? saveDraft(state.progress, data.problemId, data.sourceCode) : Promise.resolve(),
+      recalcRoundScore(claims.studentId, round),
+    ]);
+
 
     // Safe feedback only: no bug identifiers, patterns or solution details, and
     // hidden test cases report pass/fail without inputs or expected output.
