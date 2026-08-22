@@ -1054,83 +1054,106 @@ export const submitCode = createServerFn({ method: "POST" }).middleware([apiMetr
     if (!round) throw new Error("Round not found.");
     await requireWritableAttempt(claims.studentId, round);
 
-    const now = nowIso();
-    const submissionId = newId();
-    const { error: insertError } = await db.from("programming_submissions").insert({
-      id: submissionId,
-      studentId: claims.studentId,
-      problemId: data.problemId,
-      sourceCode: data.code,
-      language,
-      status: "RUNNING",
-      score: 0,
-      isFinal: false,
-      submittedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
-    if (insertError) {
-      console.error("[submit] insert failed", insertError.message);
-      throw new Error("Could not record your submission. Please try again.");
-    }
+    const { dedupe, fingerprint } = await import("./exec-dedupe.server");
+    // Double clicks, retries and duplicate events join the submission that is
+    // already being evaluated instead of running the same program twice.
+    return dedupe(
+      `r3:${claims.studentId}:${data.problemId}:${language}:${fingerprint(data.code)}`,
+      async () => {
+        const startedAt = Date.now();
+        const now = nowIso();
+        const submissionId = newId();
 
-    const { data: tests } = await db
-      .from("test_cases")
-      .select("*")
-      .eq("problemId", data.problemId)
-      .order("orderNo", { ascending: true });
+        // The immutable snapshot insert and the test-case read are independent,
+        // so they run together instead of one after the other.
+        const [{ error: insertError }, { data: tests }] = await Promise.all([
+          db.from("programming_submissions").insert({
+            id: submissionId,
+            studentId: claims.studentId,
+            problemId: data.problemId,
+            sourceCode: data.code,
+            language,
+            status: "RUNNING",
+            score: 0,
+            isFinal: false,
+            submittedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          }),
+          db
+            .from("test_cases")
+            .select("*")
+            .eq("problemId", data.problemId)
+            .order("orderNo", { ascending: true }),
+        ]);
+        if (insertError) {
+          console.error("[submit] insert failed", insertError.message);
+          throw new Error("Could not record your submission. Please try again.");
+        }
 
-    const result = await judgeSubmission(language, data.code, (tests ?? []) as Row[], problem, {
-      studentId: claims.studentId,
-      roundId: str(problem["roundId"]),
-      submissionId,
-    });
+        const judgeStart = Date.now();
+        const result = await judgeSubmission(language, data.code, (tests ?? []) as Row[], problem, {
+          studentId: claims.studentId,
+          roundId: str(problem["roundId"]),
+          submissionId,
+        });
+        const judgeMs = Date.now() - judgeStart;
 
-    const { error: updateError } = await db
-      .from("programming_submissions")
-      .update({
-        status: result.status,
-        score: result.score,
-        passedTests: result.passed,
-        totalTests: result.total,
-        executionMs: result.durationMs,
-        memoryKb: result.memoryKb,
-        compileOutput: result.compileOutput,
-        executionOutput: result.executionOutput,
-        resultJson: {
-          message: result.message,
+        // The final score must be safely persisted before the submission is
+        // reported as successful; the round-score rollup runs alongside it.
+        const dbStart = Date.now();
+        const [{ error: updateError }, roundScore] = await Promise.all([
+          db
+            .from("programming_submissions")
+            .update({
+              status: result.status,
+              score: result.score,
+              passedTests: result.passed,
+              totalTests: result.total,
+              executionMs: result.durationMs,
+              memoryKb: result.memoryKb,
+              compileOutput: result.compileOutput,
+              executionOutput: result.executionOutput,
+              resultJson: {
+                message: result.message,
+                passed: result.passed,
+                failed: result.failed,
+                total: result.total,
+                durationMs: result.durationMs,
+                memoryKb: result.memoryKb,
+                memoryLimitMb: problem["memoryLimitMb"] ?? null,
+                tests: result.results.map((r) => ({
+                  index: r.index,
+                  hidden: r.hidden,
+                  passed: r.passed,
+                  status: r.status ?? "",
+                })),
+              },
+              updatedAt: nowIso(),
+            })
+            .eq("id", submissionId),
+          recalcRoundScore(claims.studentId, round),
+        ]);
+        if (updateError) console.error("[submit] update failed", updateError.message);
+        console.info(
+          `[submit] r3 judgeMs=${judgeMs} dbMs=${Date.now() - dbStart} totalMs=${Date.now() - startedAt} tests=${result.total}`,
+        );
+
+        return {
+          submissionId,
+          status: result.status,
+          score: result.score,
           passed: result.passed,
           failed: result.failed,
           total: result.total,
           durationMs: result.durationMs,
-          memoryKb: result.memoryKb,
-          memoryLimitMb: problem["memoryLimitMb"] ?? null,
-          tests: result.results.map((r) => ({
-            index: r.index,
-            hidden: r.hidden,
-            passed: r.passed,
-            status: r.status ?? "",
-          })),
-        },
-        updatedAt: nowIso(),
-      })
-      .eq("id", submissionId);
-    if (updateError) console.error("[submit] update failed", updateError.message);
+          message: result.message,
+          results: redactForStudent(result.results),
+          roundScore,
+        };
+      },
+    );
 
-    const roundScore = await recalcRoundScore(claims.studentId, round);
-
-    return {
-      submissionId,
-      status: result.status,
-      score: result.score,
-      passed: result.passed,
-      failed: result.failed,
-      total: result.total,
-      durationMs: result.durationMs,
-      message: result.message,
-      results: redactForStudent(result.results),
-      roundScore,
-    };
   });
 
 /** Records an anti-cheating violation for the current round. */
