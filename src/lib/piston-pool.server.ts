@@ -1100,9 +1100,22 @@ const NODE_LIST_TTL_MS = 2_000;
  */
 let nodeListInFlight: Promise<PistonNode[]> | null = null;
 
+const NODE_LIST_STALE_MS = 15_000;
+
 async function listNodesForRun(): Promise<PistonNode[]> {
   const cached = nodeListCache;
   if (cached && Date.now() - cached.at < NODE_LIST_TTL_MS) return cached.nodes;
+  // Stale-while-revalidate: a slightly old pool snapshot is served instantly
+  // and refreshed in the background, so no student pays the lookup round trip.
+  if (cached && Date.now() - cached.at < NODE_LIST_STALE_MS) {
+    if (!nodeListInFlight) void refreshNodeList().catch(() => undefined);
+    return cached.nodes;
+  }
+  if (nodeListInFlight) return nodeListInFlight;
+  return refreshNodeList();
+}
+
+function refreshNodeList(): Promise<PistonNode[]> {
   if (nodeListInFlight) return nodeListInFlight;
   nodeListInFlight = (async () => {
     try {
