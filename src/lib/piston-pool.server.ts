@@ -1100,9 +1100,22 @@ const NODE_LIST_TTL_MS = 2_000;
  */
 let nodeListInFlight: Promise<PistonNode[]> | null = null;
 
+const NODE_LIST_STALE_MS = 15_000;
+
 async function listNodesForRun(): Promise<PistonNode[]> {
   const cached = nodeListCache;
   if (cached && Date.now() - cached.at < NODE_LIST_TTL_MS) return cached.nodes;
+  // Stale-while-revalidate: a slightly old pool snapshot is served instantly
+  // and refreshed in the background, so no student pays the lookup round trip.
+  if (cached && Date.now() - cached.at < NODE_LIST_STALE_MS) {
+    if (!nodeListInFlight) void refreshNodeList().catch(() => undefined);
+    return cached.nodes;
+  }
+  if (nodeListInFlight) return nodeListInFlight;
+  return refreshNodeList();
+}
+
+function refreshNodeList(): Promise<PistonNode[]> {
   if (nodeListInFlight) return nodeListInFlight;
   nodeListInFlight = (async () => {
     try {
@@ -1308,10 +1321,12 @@ async function raceOnPistonPool(
   // Capacity slots are claimed atomically up front; every one of them is
   // released again on every exit path below (win, loss, failure, cancel,
   // timeout, throw) so a cancelled job never stays counted as active.
-  const claimed: PistonNode[] = [];
-  for (const node of eligible) {
-    if (await acquireSlot(node.nodeId)) claimed.push(node);
-  }
+  // Claimed in parallel: four sequential round trips to the database would
+  // cost more than the executions themselves.
+  const claims = await Promise.all(
+    eligible.map((node) => acquireSlot(node.nodeId).catch(() => false)),
+  );
+  const claimed = eligible.filter((_, index) => claims[index]);
   if (!claimed.length) {
     raceInFlight -= 1;
     return null;
@@ -1343,6 +1358,13 @@ async function raceOnPistonPool(
   }
 
   type Attempt = { result: ExecResult; nodeId: string; ms: number } | null;
+
+  // Resolved by the first valid response so the caller returns immediately;
+  // the losing requests are aborted and finish cleaning up in the background.
+  let resolveWinner: (value: NonNullable<Attempt>) => void = () => {};
+  const winnerPromise = new Promise<NonNullable<Attempt>>((resolve) => {
+    resolveWinner = resolve;
+  });
 
   const attempts = claimed.map(async (node): Promise<Attempt> => {
     const controller = new AbortController();
@@ -1376,7 +1398,10 @@ async function raceOnPistonPool(
         }
       }
       const ms = Date.now() - started;
-      slotReleased = await recordRun(
+      // The student already has their answer: persist stats and release the
+      // slot in the background instead of holding the response on a DB write.
+      slotReleased = true;
+      void recordRun(
         node.nodeId,
         null,
         {
@@ -1394,7 +1419,8 @@ async function raceOnPistonPool(
           failureReason: "",
         },
         null,
-      );
+      ).catch(() => releaseSlot(node.nodeId).catch(() => undefined));
+      resolveWinner({ result, nodeId: node.nodeId, ms });
       return { result, nodeId: node.nodeId, ms };
     } catch (err) {
       const error =
@@ -1439,9 +1465,16 @@ async function raceOnPistonPool(
     }
   });
 
+  const allSettled = Promise.all(attempts);
   try {
-    const settled = await Promise.all(attempts);
-    const winner = settled.find((entry): entry is NonNullable<Attempt> => entry !== null);
+    // Whichever comes first: the first valid response, or every attempt
+    // finishing without one.
+    const winner = await Promise.race([
+      winnerPromise,
+      allSettled.then((settled) =>
+        settled.find((entry): entry is NonNullable<Attempt> => entry !== null) ?? null,
+      ),
+    ]);
     const totalMs = Date.now() - t0;
     console.info(
       `[piston-race] request=${executionRequestId} vms=[${claimed.map((n) => n.nodeId).join(",")}] ` +
@@ -1470,9 +1503,15 @@ async function raceOnPistonPool(
       `every raced Piston VM failed: ${failures.join("; ") || "unknown"}`,
     );
   } finally {
-    clearTimeout(deadlineTimer);
-    if (clientSignal) clientSignal.removeEventListener("abort", onClientAbort);
-    raceInFlight -= 1;
+    // Losers are aborted already; wait for their cleanup off the response path
+    // so slots and the concurrency valve are still accounted for correctly.
+    void allSettled
+      .catch(() => undefined)
+      .finally(() => {
+        clearTimeout(deadlineTimer);
+        if (clientSignal) clientSignal.removeEventListener("abort", onClientAbort);
+        raceInFlight -= 1;
+      });
   }
 }
 
@@ -1484,6 +1523,24 @@ async function raceOnPistonPool(
  * engine list and its Judge0 fallback. Participant errors (compile error,
  * runtime error, wrong output, TLE) are normal results and never fail over.
  */
+/** Last background re-probe per node, so recovery checks stay cheap. */
+const lastRecheck = new Map<string, number>();
+const RECHECK_INTERVAL_MS = 15_000;
+
+function maybeRecheckDegraded(all: PistonNode[]): Promise<void> {
+  const now = Date.now();
+  const stale = all.filter(
+    (node) =>
+      node.enabled &&
+      node.url.trim() &&
+      node.healthStatus !== "ONLINE" &&
+      now - (lastRecheck.get(node.nodeId) ?? 0) > RECHECK_INTERVAL_MS,
+  );
+  if (!stale.length) return Promise.resolve();
+  for (const node of stale) lastRecheck.set(node.nodeId, now);
+  return Promise.all(stale.map((node) => checkNode(node).catch(() => null))).then(() => undefined);
+}
+
 export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | null> {
   const t0 = Date.now();
   // Self-healing during the event, without a separate scheduler: student
@@ -1500,6 +1557,11 @@ export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | nu
     return null;
   }
   let nodes = usableNodes(all);
+  // A node marked UNHEALTHY stays out of the rotation until something probes
+  // it again. Re-probe degraded nodes in the background (throttled, never
+  // awaited) so a VM that has recovered rejoins the round-robin on its own
+  // instead of leaving all traffic on the survivors.
+  void maybeRecheckDegraded(all);
 
   // Every enabled node is currently marked OFFLINE. That status is only a
   // memory of a past probe, so re-check the nodes live before declaring the
@@ -1644,7 +1706,12 @@ export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | nu
       );
       execMs += Date.now() - started;
       const tPersist = Date.now();
-      slotReleased = await recordRun(
+      // Stats, audit row and slot release are bookkeeping: the student's
+      // result must not wait on a database round trip.
+      const persistedInflightId = inflightId;
+      slotReleased = true;
+      inflightId = null;
+      void recordRun(
         node.nodeId,
         null,
         {
@@ -1661,9 +1728,11 @@ export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | nu
           status: result.status ?? "ACCEPTED",
           failureReason: "",
         },
-        inflightId,
-      );
-      if (slotReleased) inflightId = null;
+        persistedInflightId,
+      ).then((released) => {
+        if (!released) return releaseSlot(node.nodeId).catch(() => undefined);
+        return undefined;
+      }).catch(() => releaseSlot(node.nodeId).catch(() => undefined));
 
       console.info(
         `[piston-pool] run ok node=${node.nodeId} attempts=${attempts} ` +
