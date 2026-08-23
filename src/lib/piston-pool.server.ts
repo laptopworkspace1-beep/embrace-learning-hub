@@ -1693,7 +1693,12 @@ export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | nu
       );
       execMs += Date.now() - started;
       const tPersist = Date.now();
-      slotReleased = await recordRun(
+      // Stats, audit row and slot release are bookkeeping: the student's
+      // result must not wait on a database round trip.
+      const persistedInflightId = inflightId;
+      slotReleased = true;
+      inflightId = null;
+      void recordRun(
         node.nodeId,
         null,
         {
@@ -1710,9 +1715,11 @@ export async function runOnPistonPool(input: ExecInput): Promise<PoolResult | nu
           status: result.status ?? "ACCEPTED",
           failureReason: "",
         },
-        inflightId,
-      );
-      if (slotReleased) inflightId = null;
+        persistedInflightId,
+      ).then((released) => {
+        if (!released) return releaseSlot(node.nodeId).catch(() => undefined);
+        return undefined;
+      }).catch(() => releaseSlot(node.nodeId).catch(() => undefined));
 
       console.info(
         `[piston-pool] run ok node=${node.nodeId} attempts=${attempts} ` +
